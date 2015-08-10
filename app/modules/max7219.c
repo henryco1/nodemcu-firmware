@@ -16,42 +16,61 @@
  * and supports much higher bandwidth.
  */
 
-static void max7219_spi_write32(u8 spi_no, u32 data) {
+u32 max7219_dout = 2; // gpio4
+u32 max7219_cs = 3;   // gpio0
+u32 max7219_clk = 4;  // gpio2
+
+static void max7219_strip(u8 const *data, u32 len) {
+    u32 dout_mask = 1 << pin_num[max7219_dout];
+    u32 clk_mask  = 1 << pin_num[max7219_clk];
+    u8 mask = 0x80;
+    u8 const *end = data + len;
     
-    while(READ_PERI_REG(SPI_CMD(spi_no))&SPI_USR);    // Correct 
+    while (true) {
+        if (*data & mask) {
+            GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, dout_mask); // Set pin high
+            //c_printf("1");
+        } else {
+            GPIO_REG_WRITE(GPIO_OUT_W1TC_ADDRESS, dout_mask); // Set pin low
+            //c_printf("0");
+        }
 
-    // Set SPI to use 32 bits
-    WRITE_PERI_REG(
-        SPI_USER1(spi_no),
-        ((31&SPI_USR_MOSI_BITLEN)<<SPI_USR_MOSI_BITLEN_S) |
-        ((31&SPI_USR_MISO_BITLEN)<<SPI_USR_MISO_BITLEN_S));
 
-    // Is this if-case necessary?
-    // if(READ_PERI_REG(SPI_USER(spi_no))&SPI_WR_BYTE_ORDER)
-    // Copy data to W0
-    WRITE_PERI_REG(SPI_W0(spi_no), data);
+        GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, clk_mask); // Set pin high
+        GPIO_REG_WRITE(GPIO_OUT_W1TC_ADDRESS, clk_mask); // Set pin low
 
-    // Send
-    SET_PERI_REG_MASK(SPI_CMD(spi_no), SPI_USR);
+        if (!(mask >>= 1)) { // Next bit/byte
+            data++;
+            if (data >= end) {
+                break;
+            }
+            mask = 0x80;
+        }
+    }
 }
 
-static void max7219_strip_hspi(u8 const * data, u16 len) {
-    // TODO: write it a bit nicer
-    while (len>3) {
-        u32 data32 = *((u32 const *) data);
-        max7219_spi_write32(HSPI, data32);
-        len -= 4;
-        data += 4;
-    }
-    while (len--) {
-        platform_spi_send_recv(HSPI, *(data++));
-    }
+static void max7219_write_reg(u8 const reg, u8 const data) {
+    u8 buf[2] = {reg, data};
+
+    GPIO_REG_WRITE(GPIO_OUT_W1TC_ADDRESS, 1 << pin_num[max7219_cs]); // CS=low
+
+    max7219_strip(buf, sizeof(buf));
+
+    GPIO_REG_WRITE(GPIO_OUT_W1TS_ADDRESS, 1 << pin_num[max7219_cs]); // CS=high
+}
+
+static void enable_pin(u32 pin){
+    platform_gpio_mode(pin, PLATFORM_GPIO_OUTPUT, PLATFORM_GPIO_FLOAT);
+    platform_gpio_write(pin, 0);
 }
 
 static u32 max7219_init(lua_State* L) {
-    // TODO: clock seems to be broken in app/driver/spi.c
-    return platform_spi_setup(1, PLATFORM_SPI_MASTER, PLATFORM_SPI_CPOL_HIGH,
-              PLATFORM_SPI_CPHA_HIGH, PLATFORM_SPI_DATABITS_8, 0);
+    c_printf("MAX7219 init: dout=%d, cs=%d, clk=%d\n",
+        max7219_dout, max7219_cs, max7219_clk);
+
+    enable_pin(max7219_dout);
+    enable_pin(max7219_cs);
+    enable_pin(max7219_clk);
 }
 
 static int max7219_init_lua(lua_State* L) {
@@ -60,11 +79,14 @@ static int max7219_init_lua(lua_State* L) {
     return 1;
 }
 
-static int ICACHE_FLASH_ATTR max7219_write(lua_State* L) {
+static int ICACHE_FLASH_ATTR max7219_write_lua(lua_State* L) {
     size_t length;
     const char *buffer = luaL_checklstring(L, 1, &length);
 
-    max7219_strip_hspi(buffer, length);
+    if (length != 2) {
+        return luaL_error(L, "wrong arg range");
+    }
+    max7219_write_reg(buffer[0], buffer[1]);
 
     lua_pushinteger(L, length);
 
@@ -75,7 +97,7 @@ static int ICACHE_FLASH_ATTR max7219_write(lua_State* L) {
 #include "lrodefs.h"
 const LUA_REG_TYPE max7219_map[] =
 {
-    { LSTRKEY("write"),    LFUNCVAL(max7219_write)},
+    { LSTRKEY("write"),    LFUNCVAL(max7219_write_lua)},
     { LSTRKEY("init"),     LFUNCVAL(max7219_init_lua)},
     { LNILKEY, LNILVAL}
 };
