@@ -221,6 +221,15 @@
 #define ROM_MODULES_BMP085
 #endif
 
+#if defined(LUA_USE_MODULES_MAX7219)
+#define MODULES_MAX7219      "max7219"
+#define ROM_MODULES_MAX7219  \
+    _ROM(MODULES_MAX7219, luaopen_max7219, max7219_map)
+#else
+#define ROM_MODULES_MAX7219
+#endif
+
+
 
 #define LUA_MODULES_ROM     \
         ROM_MODULES_GPIO    \
@@ -250,5 +259,6 @@
         ROM_MODULES_RTCFIFO \
         ROM_MODULES_SNTP    \
         ROM_MODULES_BMP085  \
+        ROM_MODULES_MAX7219 \
 
 #endif
