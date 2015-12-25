@@ -108,11 +108,8 @@ static int ICACHE_FLASH_ATTR ws2812_writergb(lua_State* L)
 // ws2812.write(4, string.char(0, 255, 0)) uses GPIO2 and sets the first LED red.
 // ws2812.write(3, string.char(0, 0, 255):rep(10)) uses GPIO0 and sets ten LEDs blue.
 // ws2812.write(4, string.char(255, 0, 0, 255, 255, 255)) first LED green, second LED white.
-static int ICACHE_FLASH_ATTR ws2812_writegrb(lua_State* L) {
-  const uint8_t pin = luaL_checkinteger(L, 1);
-  size_t length;
-  const char *buffer = luaL_checklstring(L, 2, &length);
-
+/* static */ int ICACHE_FLASH_ATTR ws2812_writegrb(char pin, const char *buffer, int length)
+{
   // Initialize the output pin
   platform_gpio_mode(pin, PLATFORM_GPIO_OUTPUT, PLATFORM_GPIO_FLOAT);
   platform_gpio_write(pin, 0);
@@ -125,10 +122,21 @@ static int ICACHE_FLASH_ATTR ws2812_writegrb(lua_State* L) {
   return 0;
 }
 
+static int ICACHE_FLASH_ATTR ws2812_writegrb_lua(lua_State* L)
+{
+    const uint8_t pin = luaL_checkinteger(L, 1);
+    size_t length;
+    const char *buffer = luaL_checklstring(L, 2, &length);
+
+    ws2812_writegrb(pin, buffer, length);
+
+    return 0;
+}
+
 static const LUA_REG_TYPE ws2812_map[] =
 {
   { LSTRKEY( "writergb" ), LFUNCVAL( ws2812_writergb )},
-  { LSTRKEY( "write" ), LFUNCVAL( ws2812_writegrb )},
+  { LSTRKEY( "write" ), LFUNCVAL( ws2812_writegrb_lua )},
   { LNILKEY, LNILVAL}
 };
 
