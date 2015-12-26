@@ -1,6 +1,8 @@
 #include <string.h> //memcpy
+
 #include <stdio.h> // printf
-#include <c_stdio.h> // c_printf
+//#include <c_stdio.h> // c_printf
+
 
 #include "ledmate_font8x8.h"
 
@@ -22,6 +24,8 @@ unsigned char *buf;
 int width;
 int height;
 int t;
+int text_t;
+int current_msg;
 char msg[8][256];
 char msg_count;
 
@@ -95,27 +99,25 @@ static void text(char *str, int x, int y, int col) {
     while((c = *(str++))) {
         if (x > -8 && x < width && y > -8 && y < height) {
             glyph(c, x, y, col);
-            x += 8;
         }
+        x += 8;
     }
 }
 
-static void bouncyText(char *str, int x, int y, int col) {
+static void bouncy_text(char *str, int x, int y, int col) {
     char c;
     int i = 0, offset;
 
     while((c = *(str++))) {
         if (c > 127) continue;
         i++;
-        // glyph(c, x, y + ((int) (sin((float)t/2 + i) * 3)), col);
-        // offset = (SIN(((x<<2) + (t<<3))) >> 30);
-        offset = BOUNCE(((x<<2) + (t<<3)));
+        offset = BOUNCE(((i*32) + (text_t<<3)));
         glyph(c, x, y + offset, col);
         x += 8;
     }
 }
 
-static void solidBackground(int col) {
+static void solid_background(int col) {
     int x, y;
     for(y = 0; y < height; y++) {
         for(x = 0; x < width; x++) {
@@ -130,10 +132,7 @@ static void background() {
     for(y = 0; y < height; y++) {
         for(x = 0; x < width; x++) {
             X = (y % 2 == 1) ? width - 1 - x : x;
-
-            //X = (X + (SIN((t + y) / 3.0) >> 30))) % width
             int h = ((t>>1) + x) * 2 + (SIN(t*10) >> 30) + (SIN(y*30 + t*10) >> 28);
-            //printf("%d\n", h);
             unsigned char r, g, b;
             hsvtorgb(&r, &g, &b, h, 255, 8);
 
@@ -153,12 +152,6 @@ void ledmate_push_msg(const char *str, int length) {
     length = length > 254 ? 254 : length;
     memcpy(&msg[msg_count - 1][0], str, length);
     msg[msg_count - 1][length] = '\0';
-    c_printf("ledmate_push_msg(%s, %d); msg_count=%d\n", str, length, msg_count);
-
-    int i;
-    for (i = 0; i < msg_count; i++) {
-        c_printf("  %s\n", msg[i]);
-    }
 }
 
 void ledmate_init(unsigned char* _buf, int _width, int _height) {
@@ -166,16 +159,17 @@ void ledmate_init(unsigned char* _buf, int _width, int _height) {
     width = _width;
     height = _height;
 
+    current_msg = 0;
     msg_count = 0;
-    ledmate_push_msg("xil.se", sizeof("xil.se"));
-    ledmate_push_msg("111111", sizeof("xil.se"));
-    ledmate_push_msg("222222", sizeof("xil.se"));
-    ledmate_push_msg("333333", sizeof("xil.se"));
-    ledmate_push_msg("444444", sizeof("xil.se"));
-    ledmate_push_msg("555555", sizeof("xil.se"));
-    ledmate_push_msg("666666", sizeof("xil.se"));
-    ledmate_push_msg("777777", sizeof("xil.se"));
-    ledmate_push_msg("888888", sizeof("xil.se"));
+
+    {
+        char foo[] = "\x04\x00\x00\x00" "xil is my happy place";
+        ledmate_push_msg(foo, sizeof(foo));
+    }
+    {
+        char foo[] = "\x04\x00\x00\x00" "welcome to 32c3";
+        ledmate_push_msg(foo, sizeof(foo));
+    }
 
 #ifdef GENERATE_TABLES
     int i;
@@ -197,15 +191,90 @@ void ledmate_init(unsigned char* _buf, int _width, int _height) {
 #endif
 }
 
+static int render_text(char *str) {
+    unsigned char mode = str[0];
+    char direction = 0;
+
+    switch (mode) {
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+            background();
+            break;
+        default:
+            break;
+    }
+
+
+    switch (mode) {
+        case 1:
+            direction = 1;
+        case 2:
+        {
+            unsigned int col = (str[1] << 16) | (str[2] << 8) | str[3];
+            char *_str = &str[4];
+            int len = strnlen(_str, 250);
+            if (direction) {
+                text(_str, 144 - text_t, 0, col);
+            }
+            else {
+                text(_str, text_t - 8 * len, 0, col);
+            }
+            if (text_t > 144 + 8 * len) {
+                return 1;
+            }
+            break;
+        }
+        case 3:
+        {
+            unsigned int col = (str[1] << 16) | (str[2] << 8) | str[3];
+            unsigned char dur = str[4];
+            char *_str = &str[5];
+            if (text_t > dur) return 1;
+            bouncy_text(_str, 0, 0, col);
+            break;
+        }
+        case 4:
+        direction = 1;
+        case 5:
+        {
+            unsigned int col = (str[1] << 16) | (str[2] << 8) | str[3];
+            char *_str = &str[4];
+            int len = strnlen(_str, 250);
+            if (text_t > 144 + 8 * len) return 1;
+            if (direction) {
+                bouncy_text(_str, 144 - text_t, 0, col);
+            }
+            else {
+                bouncy_text(_str, text_t - 8 * len, 0, col);
+            }
+            break;
+        }
+    }
+
+    return 0;
+}
+
 void ledmate_render(int _t) {
     (void) background;
-    (void) solidBackground;
+    (void) solid_background;
     (void) text;
-    (void) bouncyText;
+    (void) bouncy_text;
 
     t = _t;
 
-    background();
-    text(msg[(t / 10) % msg_count], 0, 0, 0x0f0000);
-    bouncyText("happy 32c3!", t % (width + 8*11) - 8*11, 0, 0);
+    if (msg_count > 0) {
+        int ret = render_text(msg[current_msg]);
+        text_t++;
+        if (ret) {
+            current_msg = (current_msg + 1) % msg_count;
+            text_t = 0;
+        }
+    }
+    else {
+        bouncy_text("happy 32c3!", t % (width + 8*11) - 8*11, 0, 0);
+        background();
+    }
 }
