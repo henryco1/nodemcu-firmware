@@ -23,7 +23,7 @@ static int ICACHE_FLASH_ATTR lua_ledmate_push_msg(lua_State* L) {
     size_t length;
     const char *buffer = luaL_checklstring(L, 1, &length);
 
-    c_printf("ledmate.push_msg: [%s]:%d\n", buffer, length);
+    c_printf("ledmate.push_msg: ...:%d\n", length);
 
     ledmate_push_msg(buffer, length);
 }
