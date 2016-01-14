@@ -10,7 +10,7 @@
 int ICACHE_FLASH_ATTR ws2812_writegrb(char pin, const char *buffer, int length);
 
 #define width 144
-#define height 8
+#define height 2
 #define bpp 3
 
 struct {
@@ -25,7 +25,7 @@ static int ICACHE_FLASH_ATTR lua_ledmate_push_msg(lua_State* L) {
 
     c_printf("ledmate.push_msg: ...:%d\n", length);
 
-    ledmate_push_msg(buffer, length);
+    ledmate_push_msg(buffer, 144*2*8);
 }
 
 static int ICACHE_FLASH_ATTR lua_ledmate_run(lua_State* L) {

@@ -17,8 +17,19 @@
     signed char _BOUNCE[256] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -3, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #endif
 
+#define MIN(x, y) ((x) < (y) ? (x) : (y))
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
+#define CLAMP(a, b, x) MIN(MAX((x), (a)), (b))
+
 #define SIN(x) (_SIN[(x) & 0xFF])
 #define BOUNCE(x) (_BOUNCE[(x) & 0xFF])
+
+#define ADD_RGB(dst, src) dst =                             \
+MIN((dst | 0xff ) + (src | 0xff), 0xff) |                   \
+MIN(((dst >> 8)  | 0xff ) + ((src >> 8)  | 0xff), 0xff) |   \
+MIN(((dst >> 16) | 0xff ) + ((src >> 16) | 0xff), 0xff)
+
+#define ADD(dst, src) dst = MIN((dst) + (src), 0xff)
 
 unsigned char *buf;
 int width;
@@ -163,9 +174,14 @@ void ledmate_init(unsigned char* _buf, int _width, int _height) {
     msg_count = 0;
 
     {
-        char foo[] = "\x01\x30\x30\x30" "<<< %s(un='%s') = %u";
+        char foo[] = "\x06\x10\x10\x10" "foo";
         ledmate_push_msg(foo, sizeof(foo));
     }
+    {
+        char foo[] = "\x01\x10\x10\x10" "<<< %s(un='%s') = %u";
+        ledmate_push_msg(foo, sizeof(foo));
+    }
+    /*
     {
         char foo[] = "\x04\x00\x00\x00" "xil is my happy place";
         ledmate_push_msg(foo, sizeof(foo));
@@ -173,7 +189,7 @@ void ledmate_init(unsigned char* _buf, int _width, int _height) {
     {
         char foo[] = "\x04\x00\x00\x00" "welcome to 32c3";
         ledmate_push_msg(foo, sizeof(foo));
-    }
+    }*/
 
 #ifdef GENERATE_TABLES
     int i;
@@ -208,6 +224,8 @@ static int render_text(char *str) {
             background();
             break;
         default:
+        case 6:
+            solid_background(0x0);
             break;
     }
 
@@ -254,6 +272,26 @@ static int render_text(char *str) {
             else {
                 bouncy_text(_str, text_t - 8 * len, 0, col);
             }
+            break;
+        }
+        case 6:
+        {
+            int i, j, x;
+            unsigned char r, g, b;
+            //int factor = 25;
+            for (j = 0; j < 5; j++) {
+                x = (text_t + 48 * j) % (144*2);
+                if (j % 2 == 0) x = 144*2 - x;
+                for (i = 0; i < 16; i++) {
+                    int ii = (i + x) % (144*2);
+                    int v = SIN(i*(256/32)) >> 27;
+                    hsvtorgb(&r, &g, &b, j*32 + text_t, 255, v);
+                    ADD(buf[ii*3    ], g);
+                    ADD(buf[ii*3 + 1], r);
+                    ADD(buf[ii*3 + 2], b);
+                }
+            }
+            if (text_t > 144*10) return 1;
             break;
         }
     }
